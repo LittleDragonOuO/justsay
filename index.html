@@ -163,7 +163,7 @@ ${show&&html`<div><p class="muted">備份：按「產生備份文字」後全選
 <textarea value=${txt} onInput=${e=>setTxt(e.target.value)} style="font-size:12px;min-height:120px"></textarea>
 <div class="row"><button onClick=${()=>setTxt(makeBackup(data))}>產生備份文字</button><button class="pri" onClick=${()=>restore(txt)}>還原這段文字</button></div></div>`}</div>`}
 /* ===== 雲端同步：純規則（可單獨測試）===== */
-const GOOGLE_CLIENT_ID='';/* 若要讓所有使用者免輸入，可在這裡填入你的用戶端 ID */
+const GOOGLE_CLIENT_ID='538113407928-2nr3p8k3dcn2v9sjqogm052lo980nblu.apps.googleusercontent.com';/* 若要讓所有使用者免輸入，可在這裡填入你的用戶端 ID */
 const COLS=['spaces','grammar','sentences','items'];
 const byId=(a,b)=>a.id<b.id?-1:1;
 const hasRecords=d=>COLS.some(c=>(d[c]||[]).length>0);
@@ -297,7 +297,7 @@ ${ed&&html`<div class="sheet"><div>${F('targetLanguage','學習語言')}${F('nat
 <div class="row" style="margin-top:12px"><button onClick=${()=>setEd(null)}>取消</button><button class="pri" onClick=${ok}>儲存</button></div></div></div>`}
 <h2>資料管理</h2><div class="card"><p class="muted">${memOnly?'⚠ 目前瀏覽器無法保存資料（可能是無痕模式），關閉頁面後會消失。':'資料只儲存在這個瀏覽器，換裝置或清除網站資料就會消失。'}</p>
 <div class="row"><button onClick=${async()=>{if(await ask('重置會將所有內容恢復成第一次開啟時的示範狀態，包含刪除你新增的紀錄。'))setData(seedDemo(store.init()?.firstOpenDate||t))}}>重置示範資料</button>
-<button onClick=${async()=>{if(await ask('只會刪除標示「示範」的資料，你自己建立的內容會保留。'))up(R.removeDemo)}}>移除示範資料</button></div></div><${Backup}/><${SyncCard}/><p class="muted" style="margin-top:16px"><a href="privacy.html">隱私權政策</a></p>`}
+<button onClick=${async()=>{if(await ask('只會刪除標示「示範」的資料，你自己建立的內容會保留。'))up(R.removeDemo)}}>移除示範資料</button></div></div><${Backup}/><${SyncCard}/><p class="muted" style="margin-top:16px"><a href="privacy.html">隱私權政策</a>　<a href="terms.html">服務條款</a></p>`}
 function SForm(){const {data,say,go,sid,t,sedit,setData,grammars}=React.useContext(Ctx);
 const old=data.sentences.find(x=>x.id===sedit);
 const [f,setF]=useState(old?{...old,difficulties:old.difficulties.map(x=>({...x}))}:{studyDate:t,originalSentence:'',firstAttempt:'',naturalExpression:'',correctionNote:'',difficulties:[],grammarIds:[]});
