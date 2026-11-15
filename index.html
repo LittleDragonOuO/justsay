@@ -232,14 +232,13 @@ const label=cfg.enabled?(st.s==='syncing'?'同步中…':st.s==='ok'?'已同步'
 return {cfg,st,label,run,clientId,fixed:!!GOOGLE_CLIENT_ID,setClientId:v=>save({...ref.current.cfg,clientId:v}),
 connect:()=>{if(!clientId)return say('請先輸入 Google 用戶端 ID');save({...ref.current.cfg,enabled:true});run(true)},
 disconnect:()=>{try{if(Drive.tok&&window.google)window.google.accounts.oauth2.revoke(Drive.tok)}catch(e){}Drive.tok=null;save({...ref.current.cfg,enabled:false,synced:false});setSt({s:'off',msg:''})}}}
-function SyncCard(){const {sync}=React.useContext(Ctx);const [help,setHelp]=useState(false),c=sync.cfg;
+function SyncCard(){const {sync}=React.useContext(Ctx);const c=sync.cfg;
 return html`<div class="card"><h3>雲端同步（Google 雲端硬碟）</h3>
 <p class="muted">資料會存到你自己的 Google 雲端硬碟專用資料夾，只有你的帳號看得到。電腦與手機都連線後，會自動同步。</p>
 ${!sync.fixed&&html`<div><label>Google 用戶端 ID</label><input type="text" value=${c.clientId||''} onInput=${e=>sync.setClientId(e.target.value.trim())} placeholder="xxxx.apps.googleusercontent.com"/></div>`}
 <p>狀態：${sync.label}</p>
-<div class="row">${!c.enabled?html`<button class="pri" onClick=${sync.connect}>連線 Google 雲端硬碟</button>`:html`<button class="pri" onClick=${()=>sync.run(true)}>立即同步</button><button onClick=${sync.disconnect}>中斷連線</button>`}
-<button onClick=${()=>setHelp(!help)}>${help?'收合說明':'如何取得用戶端 ID'}</button></div>
-${help&&html`<ol class="muted"><li>開啟 Google Cloud Console，建立一個專案。</li><li>「API 和服務」→「程式庫」，啟用 Google Drive API。</li><li>「OAuth 同意畫面」：類型選「外部」，並把你的 Google 信箱加入「測試使用者」。</li><li>「憑證」→「建立憑證」→「OAuth 用戶端 ID」，類型選「網頁應用程式」。</li><li>「已授權的 JavaScript 來源」填你的網站網址，例如 https://帳號.github.io（不含後面的路徑）。</li><li>把產生的用戶端 ID 貼到上方欄位。</li></ol>`}</div>`}
+<div class="row">${!c.enabled?html`<button class="pri" onClick=${sync.connect}>連線 Google 雲端硬碟</button>`:html`<button class="pri" onClick=${()=>sync.run(true)}>立即同步</button><button onClick=${sync.disconnect}>中斷連線</button>`}</div>
+</div>`}
 const Ctx=React.createContext();
 function AddItem(){const {data,up,say,go,sid,sp,t,setEdit,edit,setData,gcard,grammars}=React.useContext(Ctx);const[tp,setTp]=useState(''),[k,setK]=useState('learn'),[dd,setDd]=useState(addDays(t,1));
 return html`<h2>手動新增待學項目</h2><div class="card"><label>主題</label><input type="text" value=${tp} onInput=${e=>setTp(e.target.value)}/>
