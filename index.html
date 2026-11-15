@@ -283,7 +283,7 @@ ${more&&html`<div><label>分類</label><input type="text" list="cats" value=${f.
 <label>標籤（用逗號分隔）</label><input type="text" value=${f.tags} onInput=${s('tags')}/></div>`}
 ${old&&html`<h2>連結到此文法的生活句子</h2>${linked.map(x=>html`<div class="card" key=${x.id}>${x.originalSentence}</div>`)}${!linked.length&&html`<div class="muted">尚無</div>`}`}
 <div style="height:70px"></div><div class="bar"><button onClick=${()=>go('grammar')}>取消</button><button class="pri" onClick=${save}>儲存</button></div>`}
-function Spaces(){const {data,up,say,go,sid,sp,t,setEdit,edit,setData,gcard,grammars}=React.useContext(Ctx);const[ed,setEd]=useState(null);
+function Spaces(){const {data,up,say,go,sid,sp,t,setEdit,edit,setData,gcard,grammars,sync}=React.useContext(Ctx);const[ed,setEd]=useState(null);
 const F=(k,l)=>html`<label>${l}</label><input type="text" value=${ed[k]} onInput=${e=>setEd({...ed,[k]:e.target.value})}/>`;
 const ok=()=>{if(!ed.targetLanguage.trim())return say('請輸入學習語言');const sv={...ed,categoryOptions:String(ed.categoryOptions).split(/[,，]/).map(x=>x.trim()).filter(Boolean),tagOptions:String(ed.tagOptions).split(/[,，]/).map(x=>x.trim()).filter(Boolean),updatedAt:now()};
 up(d=>d.spaces.some(x=>x.id===sv.id)?{...d,spaces:d.spaces.map(x=>x.id===sv.id?sv:x)}:{...d,spaces:[...d.spaces,sv],settings:{...d.settings,currentSpaceId:sv.id}});setEd(null)};
@@ -294,8 +294,8 @@ return html`<h2>語言空間</h2>${data.spaces.map(s=>html`<div class="card" key
 <button class="pri" onClick=${()=>setEd(base({targetLanguage:'',nativeLanguage:'中文',level:'',goal:'',categoryOptions:'',tagOptions:''}))}>＋ 新增語言空間</button>
 ${ed&&html`<div class="sheet"><div>${F('targetLanguage','學習語言')}${F('nativeLanguage','母語')}${F('level','目前程度')}${F('goal','學習目標')}${F('categoryOptions','自訂文法分類（逗號分隔）')}${F('tagOptions','自訂標籤（逗號分隔）')}
 <div class="row" style="margin-top:12px"><button onClick=${()=>setEd(null)}>取消</button><button class="pri" onClick=${ok}>儲存</button></div></div></div>`}
-<h2>資料管理</h2><div class="card"><p class="muted">${memOnly?'⚠ 目前瀏覽器無法保存資料（可能是無痕模式），關閉頁面後會消失。':'資料只儲存在這個瀏覽器，換裝置或清除網站資料就會消失。'}</p>
-<div class="row"><button onClick=${async()=>{if(await ask('重置會將所有內容恢復成第一次開啟時的示範狀態，包含刪除你新增的紀錄。'))setData(seedDemo(store.init()?.firstOpenDate||t))}}>重置示範資料</button>
+<h2>資料管理</h2><div class="card"><p class="muted">${memOnly?'⚠ 目前瀏覽器無法保存資料（可能是無痕模式），關閉頁面後會消失。':(sync&&sync.cfg.enabled?'已連線雲端同步：資料同時保存在這個瀏覽器與你的 Google 雲端硬碟。在任一台裝置重置或刪除資料，也會同步到其他裝置。':'資料預設只儲存在這個瀏覽器，換裝置或清除網站資料就會消失。連線 Google 雲端硬碟後，可以在多台裝置之間同步。')}</p>
+<div class="row"><button onClick=${async()=>{if(await ask('重置會將所有內容恢復成第一次開啟時的示範狀態，包含刪除你新增的紀錄。'+(sync&&sync.cfg.enabled?'\n\n你已連線雲端同步，其他裝置上的資料也會一併被重置。':'')))setData(seedDemo(store.init()?.firstOpenDate||t))}}>重置示範資料</button>
 <button onClick=${async()=>{if(await ask('只會刪除標示「示範」的資料，你自己建立的內容會保留。'))up(R.removeDemo)}}>移除示範資料</button></div></div><${Backup}/><${SyncCard}/><p class="muted" style="margin-top:16px"><a href="privacy.html">隱私權政策</a>　<a href="terms.html">服務條款</a></p>`}
 function SForm(){const {data,say,go,sid,t,sedit,setData,grammars}=React.useContext(Ctx);
 const old=data.sentences.find(x=>x.id===sedit);
