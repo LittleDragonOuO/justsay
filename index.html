@@ -57,7 +57,7 @@ const raw={get:k=>{try{return localStorage.getItem(k)}catch(e){memOnly=true;retu
 set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){memOnly=true;mem[k]=v}}};
 const store={load(){const s=raw.get(KD);return s?JSON.parse(s):null},save(d){raw.set(KD,JSON.stringify(d))},
 init(){const s=raw.get(KI);return s?JSON.parse(s):null},markInit(o){raw.set(KI,JSON.stringify(o))}};
-const migrate=d=>({schemaVersion:1,settings:{currentSpaceId:null},...d,spaces:d.spaces||[],grammar:d.grammar||[],sentences:(d.sentences||[]).map(x=>({difficulties:[],grammarIds:[],...x})),items:d.items||[]});
+const migrate=d=>({schemaVersion:1,settings:{currentSpaceId:null},...d,tombs:d.tombs||{},spaces:d.spaces||[],grammar:d.grammar||[],sentences:(d.sentences||[]).map(x=>({difficulties:[],grammarIds:[],...x})),items:d.items||[]});
 /* ===== 示範資料 ===== */
 function seedDemo(first){
 const d=n=>addDays(first,-n),D=o=>base({isDemo:true,...o});
@@ -149,7 +149,8 @@ if(!ids.has(m.settings.currentSpaceId))m.settings={...m.settings,currentSpaceId:
 return {data:m,init:o.init||null}};
 const makeBackup=data=>JSON.stringify({app:'daily-lingua',version:1,exportedAt:now(),init:store.init(),data},null,1);
 function Backup(){const {data,setData,say,t}=React.useContext(Ctx);const [txt,setTxt]=useState(''),[show,setShow]=useState(false);const ref=React.useRef(null);
-const exportFile=async()=>{const text=makeBackup(data);try{const dl=window.claude&&await window.claude.use('downloads');if(!dl)throw {code:'unavailable'};
+const exportFile=async()=>{const text=makeBackup(data);try{if(!window.claude){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'application/json'}));a.download='daily-lingua-backup-'+t+'.json';document.body.appendChild(a);a.click();a.remove();say('備份已下載');return}
+const dl=await window.claude.use('downloads');if(!dl)throw {code:'unavailable'};
 await dl.save({filename:'daily-lingua-backup-'+t+'.json',data:text});say('備份已儲存')}catch(e){if(e&&e.code==='declined')return;setTxt(text);setShow(true);say('無法直接下載，請複製下方文字自行保存')}};
 const restore=async text=>{const r=parseBackup(text);if(r.err)return say(r.err);const d=r.data;
 if(!await ask('要用備份取代目前所有資料嗎？\n備份內容：'+d.spaces.length+' 個語言空間、'+d.grammar.length+' 筆文法、'+d.sentences.length+' 句生活句子、'+d.items.length+' 筆待學項目。\n目前的資料會被覆蓋，無法復原。',{yes:'還原'}))return;
@@ -161,6 +162,84 @@ return html`<div class="card"><h3>備份與還原</h3><p class="muted">資料只
 ${show&&html`<div><p class="muted">備份：按「產生備份文字」後全選複製存起來。還原：貼上備份文字，按「還原這段文字」。</p>
 <textarea value=${txt} onInput=${e=>setTxt(e.target.value)} style="font-size:12px;min-height:120px"></textarea>
 <div class="row"><button onClick=${()=>setTxt(makeBackup(data))}>產生備份文字</button><button class="pri" onClick=${()=>restore(txt)}>還原這段文字</button></div></div>`}</div>`}
+/* ===== 雲端同步：純規則（可單獨測試）===== */
+const GOOGLE_CLIENT_ID='';/* 若要讓所有使用者免輸入，可在這裡填入你的用戶端 ID */
+const COLS=['spaces','grammar','sentences','items'];
+const byId=(a,b)=>a.id<b.id?-1:1;
+const hasRecords=d=>COLS.some(c=>(d[c]||[]).length>0);
+const canon=d=>JSON.stringify([COLS.map(c=>[...(d[c]||[])].sort(byId)),Object.keys(d.tombs||{}).sort().map(k=>[k,d.tombs[k]])]);
+// 每次資料變動後：自動更新「最後修改時間」並為刪除的資料留下記號（同步時才不會被另一台裝置復活）
+function stamp(prev,next){if(prev===next)return next;const n={...next},tombs={...(prev.tombs||{}),...(next.tombs||{})},t=now();
+for(const c of COLS){const pm=new Map((prev[c]||[]).map(x=>[x.id,x])),ids=new Set();
+n[c]=(next[c]||[]).map(x=>{ids.add(x.id);const o=pm.get(x.id);delete tombs[x.id];
+if(o&&x.updatedAt===o.updatedAt&&JSON.stringify(x)!==JSON.stringify(o))return {...x,updatedAt:t};return x});
+(prev[c]||[]).forEach(o=>{if(!ids.has(o.id)){const e=tombs[o.id];if(!e||e<o.updatedAt)tombs[o.id]=t}})}
+n.tombs=tombs;return n}
+// 合併兩份資料：逐筆比較最後修改時間；刪除記號比修改晚就刪除；最後修復關聯、主要文法唯一與待學項目重複
+function mergeData(a,b){const tombs={...(b.tombs||{})};for(const k in (a.tombs||{}))if(!tombs[k]||tombs[k]<a.tombs[k])tombs[k]=a.tombs[k];
+const out={schemaVersion:1,settings:a.settings,tombs},T=now();
+for(const c of COLS){const m=new Map();for(const x of [...(b[c]||[]),...(a[c]||[])]){const o=m.get(x.id);if(!o||x.updatedAt>=o.updatedAt)m.set(x.id,x)}
+out[c]=[...m.values()].filter(x=>!(tombs[x.id]&&tombs[x.id]>=x.updatedAt)).sort(byId)}
+const sp=new Set(out.spaces.map(x=>x.id));for(const c of COLS.slice(1))out[c]=out[c].filter(x=>sp.has(x.spaceId));
+const gn=new Set(out.grammar.map(g=>g.id));
+out.sentences=out.sentences.map(s=>{const bad=(s.grammarIds||[]).some(i=>!gn.has(i))||(s.difficulties||[]).some(d=>d.grammarId&&!gn.has(d.grammarId));
+return bad?{...s,updatedAt:T,grammarIds:s.grammarIds.filter(i=>gn.has(i)),difficulties:s.difficulties.map(d=>d.grammarId&&!gn.has(d.grammarId)?{...d,grammarId:null,grammarNameSnapshot:d.grammarNameSnapshot||d.topic||''}:d)}:s});
+out.items=out.items.map(i=>i.grammarId&&!gn.has(i.grammarId)?{...i,updatedAt:T,grammarId:null,grammarNameSnapshot:i.grammarNameSnapshot||i.topic}:i);
+const mains={};out.grammar.forEach(g=>{if(g.isMain){const k=g.spaceId+'|'+g.studyDate;(mains[k]=mains[k]||[]).push(g)}});
+const demote=new Set();for(const k in mains)mains[k].sort((x,y)=>x.updatedAt<y.updatedAt?1:-1).slice(1).forEach(g=>demote.add(g.id));
+if(demote.size)out.grammar=out.grammar.map(g=>demote.has(g.id)?{...g,isMain:false,updatedAt:T}:g);
+const seen=new Map();out.items.forEach(i=>{if(!i.sourceSentenceId)return;const k=i.sourceSentenceId+'|'+i.sourceDifficultyId,o=seen.get(k);
+if(!o||(i.status==='done'&&o.status!=='done')||(i.status===o.status&&i.updatedAt>o.updatedAt))seen.set(k,i)});
+out.items=out.items.filter(i=>{if(!i.sourceSentenceId)return true;if(seen.get(i.sourceSentenceId+'|'+i.sourceDifficultyId)===i)return true;tombs[i.id]=T;return false});
+return out}
+/* ===== Google 雲端硬碟（只存取本網站專用的隱藏資料夾）===== */
+const Drive={tok:null,exp:0,
+async load(){if(window.google&&window.google.accounts&&window.google.accounts.oauth2)return;
+await new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.onload=ok;s.onerror=()=>no(new Error('無法載入 Google 登入程式（這個環境可能不支援）'));document.head.appendChild(s)})},
+async auth(clientId,interactive){await Drive.load();return new Promise((ok,no)=>{const c=window.google.accounts.oauth2.initTokenClient({client_id:clientId,scope:'https://www.googleapis.com/auth/drive.appdata',
+callback:r=>{if(r.error)return no(new Error('Google 登入失敗：'+r.error));Drive.tok=r.access_token;Drive.exp=Date.now()+((r.expires_in||3600)-60)*1000;ok()},
+error_callback:e=>no(new Error(e&&e.type==='popup_closed'?'已取消登入':'需要重新連線'))});c.requestAccessToken({prompt:interactive?'':'none'})})},
+async api(url,opt={}){const r=await fetch(url,{...opt,headers:{Authorization:'Bearer '+Drive.tok,...(opt.headers||{})}});
+if(r.status===401){Drive.tok=null;throw new Error('登入已過期，請重新連線')}if(!r.ok)throw new Error('Google 雲端硬碟回應錯誤（'+r.status+'）');return r},
+async find(){const r=await Drive.api('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(id)&q='+encodeURIComponent("name='daily-lingua-data.json'"));const j=await r.json();return j.files&&j.files[0]||null},
+async read(id){return (await Drive.api('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media')).text()},
+async write(id,text){const meta=id?{}:{name:'daily-lingua-data.json',parents:['appDataFolder']},bd='dl'+Date.now();
+const body='--'+bd+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify(meta)+'\r\n--'+bd+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+text+'\r\n--'+bd+'--';
+const url='https://www.googleapis.com/upload/drive/v3/files'+(id?'/'+id:'')+'?uploadType=multipart';
+await Drive.api(url,{method:id?'PATCH':'POST',headers:{'Content-Type':'multipart/related; boundary='+bd},body})}};
+function useSync(data,setData,say){
+const rd=()=>{try{return JSON.parse(raw.get('daily-lingua:sync')||'{}')}catch(e){return {}}};
+const [cfg,setCfg]=useState(rd),[st,setSt]=useState({s:'off',msg:''});
+const ref=React.useRef({}),busy=React.useRef(false),timer=React.useRef(null);ref.current={data,cfg};
+const save=c=>{raw.set('daily-lingua:sync',JSON.stringify(c));setCfg(c)};
+const clientId=GOOGLE_CLIENT_ID||cfg.clientId||'';
+const run=async interactive=>{if(busy.current)return;if(!clientId){say('請先輸入 Google 用戶端 ID');return}busy.current=true;setSt({s:'syncing',msg:''});
+try{if(!Drive.tok||Date.now()>Drive.exp)await Drive.auth(clientId,interactive);
+const local=ref.current.data,c=ref.current.cfg,f=await Drive.find();
+if(!f)await Drive.write(null,makeBackup(local));
+else{const rp=parseBackup(await Drive.read(f.id));if(rp.err)throw new Error('雲端檔案無法讀取：'+rp.err);const remote=rp.data;let mode='merge';
+if(!c.synced&&hasRecords(local)&&hasRecords(remote)){const n=await ask('雲端已經有資料，這台裝置也有資料，要怎麼處理？\n（合併時示範資料可能重複，之後可用「移除示範資料」清掉。）',{choices:['合併兩邊','用雲端資料取代這台','用這台資料取代雲端'],no:'取消'});
+if(n<0){setSt({s:'off',msg:''});return}mode=['merge','cloud','local'][n]}
+const merged=mode==='cloud'?remote:mode==='local'?local:mergeData(local,remote);
+if(mode!=='local'&&canon(merged)!==canon(local)){const cur=merged.spaces.some(x=>x.id===local.settings.currentSpaceId)?local.settings.currentSpaceId:(merged.spaces[0]?merged.spaces[0].id:null);setData(()=>({...merged,settings:{...local.settings,currentSpaceId:cur}}))}
+if(canon(merged)!==canon(remote))await Drive.write(f.id,makeBackup(merged))}
+save({...ref.current.cfg,enabled:true,synced:true,last:now()});setSt({s:'ok',msg:''})}
+catch(e){setSt({s:'err',msg:e.message||String(e)})}finally{busy.current=false}};
+const key=canon(data);
+useEffect(()=>{if(!cfg.enabled||!Drive.tok||Date.now()>Drive.exp)return;clearTimeout(timer.current);timer.current=setTimeout(()=>run(false),4000);return()=>clearTimeout(timer.current)},[key,cfg.enabled]);
+useEffect(()=>{if(cfg.enabled)run(false);const v=()=>{if(document.visibilityState==='visible'&&ref.current.cfg.enabled&&Drive.tok)run(false)};document.addEventListener('visibilitychange',v);return()=>document.removeEventListener('visibilitychange',v)},[]);
+const label=cfg.enabled?(st.s==='syncing'?'同步中…':st.s==='ok'?'已同步'+(cfg.last?' '+new Date(cfg.last).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''):st.s==='err'?'同步失敗：'+st.msg:'需要重新連線'):'未連線';
+return {cfg,st,label,run,clientId,fixed:!!GOOGLE_CLIENT_ID,setClientId:v=>save({...ref.current.cfg,clientId:v}),
+connect:()=>{if(!clientId)return say('請先輸入 Google 用戶端 ID');save({...ref.current.cfg,enabled:true});run(true)},
+disconnect:()=>{try{if(Drive.tok&&window.google)window.google.accounts.oauth2.revoke(Drive.tok)}catch(e){}Drive.tok=null;save({...ref.current.cfg,enabled:false,synced:false});setSt({s:'off',msg:''})}}}
+function SyncCard(){const {sync}=React.useContext(Ctx);const [help,setHelp]=useState(false),c=sync.cfg;
+return html`<div class="card"><h3>雲端同步（Google 雲端硬碟）</h3>
+<p class="muted">資料會存到你自己的 Google 雲端硬碟專用資料夾，只有你的帳號看得到。電腦與手機都連線後，會自動同步。</p>
+${!sync.fixed&&html`<div><label>Google 用戶端 ID</label><input type="text" value=${c.clientId||''} onInput=${e=>sync.setClientId(e.target.value.trim())} placeholder="xxxx.apps.googleusercontent.com"/></div>`}
+<p>狀態：${sync.label}</p>
+<div class="row">${!c.enabled?html`<button class="pri" onClick=${sync.connect}>連線 Google 雲端硬碟</button>`:html`<button class="pri" onClick=${()=>sync.run(true)}>立即同步</button><button onClick=${sync.disconnect}>中斷連線</button>`}
+<button onClick=${()=>setHelp(!help)}>${help?'收合說明':'如何取得用戶端 ID'}</button></div>
+${help&&html`<ol class="muted"><li>開啟 Google Cloud Console，建立一個專案。</li><li>「API 和服務」→「程式庫」，啟用 Google Drive API。</li><li>「OAuth 同意畫面」：類型選「外部」，並把你的 Google 信箱加入「測試使用者」。</li><li>「憑證」→「建立憑證」→「OAuth 用戶端 ID」，類型選「網頁應用程式」。</li><li>「已授權的 JavaScript 來源」填你的網站網址，例如 https://帳號.github.io（不含後面的路徑）。</li><li>把產生的用戶端 ID 貼到上方欄位。</li></ol>`}</div>`}
 const Ctx=React.createContext();
 function AddItem(){const {data,up,say,go,sid,sp,t,setEdit,edit,setData,gcard,grammars}=React.useContext(Ctx);const[tp,setTp]=useState(''),[k,setK]=useState('learn'),[dd,setDd]=useState(addDays(t,1));
 return html`<h2>手動新增待學項目</h2><div class="card"><label>主題</label><input type="text" value=${tp} onInput=${e=>setTp(e.target.value)}/>
@@ -218,7 +297,7 @@ ${ed&&html`<div class="sheet"><div>${F('targetLanguage','學習語言')}${F('nat
 <div class="row" style="margin-top:12px"><button onClick=${()=>setEd(null)}>取消</button><button class="pri" onClick=${ok}>儲存</button></div></div></div>`}
 <h2>資料管理</h2><div class="card"><p class="muted">${memOnly?'⚠ 目前瀏覽器無法保存資料（可能是無痕模式），關閉頁面後會消失。':'資料只儲存在這個瀏覽器，換裝置或清除網站資料就會消失。'}</p>
 <div class="row"><button onClick=${async()=>{if(await ask('重置會將所有內容恢復成第一次開啟時的示範狀態，包含刪除你新增的紀錄。'))setData(seedDemo(store.init()?.firstOpenDate||t))}}>重置示範資料</button>
-<button onClick=${async()=>{if(await ask('只會刪除標示「示範」的資料，你自己建立的內容會保留。'))up(R.removeDemo)}}>移除示範資料</button></div></div><${Backup}/>`}
+<button onClick=${async()=>{if(await ask('只會刪除標示「示範」的資料，你自己建立的內容會保留。'))up(R.removeDemo)}}>移除示範資料</button></div></div><${Backup}/><${SyncCard}/>`}
 function SForm(){const {data,say,go,sid,t,sedit,setData,grammars}=React.useContext(Ctx);
 const old=data.sentences.find(x=>x.id===sedit);
 const [f,setF]=useState(old?{...old,difficulties:old.difficulties.map(x=>({...x}))}:{studyDate:t,originalSentence:'',firstAttempt:'',naturalExpression:'',correctionNote:'',difficulties:[],grammarIds:[]});
@@ -274,10 +353,13 @@ const L=data.items.filter(i=>i.spaceId===sid&&i.status==='done').sort((a,b)=>(b.
 return html`<h2>已完成 (${L.length})</h2><button onClick=${()=>setOpen(!open)}>${open?'收合':'展開'}</button>${open&&L.map(itemRow)}`}
 /* ===== App ===== */
 function App(){
-const [data,setData]=useState(()=>{let d=store.load();if(!d){let i=store.init();const first=i?.firstOpenDate||today();if(!i)store.markInit({firstOpenDate:first,at:now()});d=i?{schemaVersion:1,settings:{currentSpaceId:null},spaces:[],grammar:[],sentences:[],items:[]}:seedDemo(first);store.save(d)}return migrate(d)});
+const [data,_setData]=useState(()=>{let d=store.load();if(!d){let i=store.init();const first=i?.firstOpenDate||today();if(!i)store.markInit({firstOpenDate:first,at:now()});d=i?{schemaVersion:1,settings:{currentSpaceId:null},spaces:[],grammar:[],sentences:[],items:[]}:seedDemo(first);store.save(d)}return migrate(d)});
 const [page,setPage]=useState('home'),[edit,setEdit]=useState(null),[sedit,setSedit]=useState(null),[menu,setMenu]=useState(false),[toast,setToast]=useState('');
+const setData=React.useCallback(f=>_setData(prev=>{const nx=typeof f==='function'?f(prev):f;return stamp(prev,nx)}),[]);
 useEffect(()=>{store.save(data)},[data]);
+useEffect(()=>{try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}},[]);
 const say=m=>{setToast(m);setTimeout(()=>setToast(''),2600)};
+const sync=useSync(data,setData,say);
 const sp=data.spaces.find(s=>s.id===data.settings.currentSpaceId)||data.spaces[0];
 const t=today(),sid=sp?.id;
 const up=f=>setData(d=>f(d));
@@ -302,8 +384,8 @@ ${g.examples[0]&&html`<div lang="ja">${g.examples[0].text}</div>`}
 <div class="row"><button class="sm" onClick=${()=>{setEdit(g.id);go('gform')}}>編輯</button>
 <button class="sm danger" onClick=${async()=>{const n=data.sentences.filter(s=>s.grammarIds.includes(g.id)).length+data.items.filter(i=>i.grammarId===g.id).length;
 if(await ask('刪除「'+g.name+'」？\n連結它的 '+n+' 筆句子／待學項目會保留，並以文字保留文法名稱。'))up(d=>R.deleteGrammar(d,g.id))}}>刪除</button></div></div>`;
-if(!sp)return html`<${Ctx.Provider} value=${{data,up,say,go,sid,sp:{categoryOptions:[]},t,setEdit,edit,setData,gcard,grammars}}><main><h1>Daily Lingua</h1><div class="empty">還沒有語言空間。<br/><button class="pri" onClick=${()=>go('spaces')}>建立語言空間</button></div>${page==='spaces'&&html`<${Spaces}/>`}</main><//>`;
-const header=html`<div class="row sp"><h1>Daily Lingua</h1><select style="width:auto" value=${sid} onChange=${e=>setSpace(e.target.value)}>
+if(!sp)return html`<${Ctx.Provider} value=${{data,up,say,go,sid,sp:{categoryOptions:[]},t,setEdit,edit,setData,gcard,grammars,sync}}><main><h1>Daily Lingua</h1><div class="empty">還沒有語言空間。<br/><button class="pri" onClick=${()=>go('spaces')}>建立語言空間</button></div>${page==='spaces'&&html`<${Spaces}/>`}</main><//>`;
+const header=html`<div class="row sp"><h1>Daily Lingua</h1>${sync.cfg.enabled&&html`<span class="muted">☁ ${sync.label}</span>`}<select style="width:auto" value=${sid} onChange=${e=>setSpace(e.target.value)}>
 ${data.spaces.map(s=>html`<option value=${s.id}>${s.targetLanguage} ▾</option>`)}</select></div>`;
 const scard=s=>html`<div class="card" key=${s.id}><div class="row sp"><b>${s.originalSentence}</b><span class="row">${(!s.firstAttempt||!s.naturalExpression)&&html`<span class="tag">未完成</span>`}${s.isDemo&&html`<span class="tag">示範</span>`}</span></div>
 ${s.firstAttempt&&html`<div class="muted">第一次：<span lang="ja">${s.firstAttempt}</span></div>`}
@@ -333,7 +415,7 @@ else body=html`${header}<${Spaces}/>`;
 
 
 
-return html`<${Ctx.Provider} value=${{data,up,say,go,sid,sp,t,setEdit,edit,sedit,setSedit,setData,gcard,grammars,scard,itemRow}}><main>${body}</main>
+return html`<${Ctx.Provider} value=${{data,up,say,go,sid,sp,t,setEdit,edit,sedit,setSedit,setData,gcard,grammars,scard,itemRow,sync}}><main>${body}</main>
 ${isForm?null:html`<nav>${nav.map(p=>p==='+'?html`<button key=${p} onClick=${()=>setMenu(true)}>＋ 新增</button>`:html`<button key=${p} class=${page===p?'on':''} onClick=${()=>go(p)}>${T[p]}</button>`)}
 <button class=${page==='spaces'?'on':''} onClick=${()=>go('spaces')} style="display:${window.innerWidth>=768?'block':'none'}">語言空間</button></nav>`}
 ${menu&&html`<div class="sheet" onClick=${()=>setMenu(false)}><div><h3>想記什麼？</h3><div class="row"><button class="pri" onClick=${()=>{setSedit(null);go('sform')}}>記一句話</button>
