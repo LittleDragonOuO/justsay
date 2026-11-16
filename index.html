@@ -255,7 +255,7 @@ if(!lang)return say('無法判斷這個語言的發音，請到「語言空間�
 const v=pickVoice(await getVoices(),lang);if(!v)return say('這台裝置沒有安裝「'+lang+'」的語音，請到系統設定新增語音');
 const u=new SpeechSynthesisUtterance(text);u.lang=v.lang;u.voice=v;u.rate=slow?0.6:0.95;window.speechSynthesis.cancel();window.speechSynthesis.speak(u)}
 function Spk({text}){const {sp,say}=React.useContext(Ctx);const t=(text||'').trim();if(!t)return null;const lang=sp?(sp.voiceLang||detectLang(sp.targetLanguage)):'';
-return html`<span class="row" style="display:inline-flex;gap:4px;flex-wrap:nowrap"><button class="sm" aria-label="朗讀" title="朗讀" style="min-width:44px" onClick=${()=>speakText(t,lang,false,say)}>🔊</button><button class="sm" aria-label="慢速朗讀" title="慢速朗讀" style="min-width:44px" onClick=${()=>speakText(t,lang,true,say)}>🐢</button></span>`}
+return html`<button class="sm" aria-label="朗讀" title="朗讀" style="min-width:44px" onClick=${()=>speakText(t,lang,false,say)}>🎵</button>`}
 const Ctx=React.createContext();
 function AddItem(){const {data,up,say,go,sid,sp,t,setEdit,edit,setData,gcard,grammars}=React.useContext(Ctx);const[tp,setTp]=useState(''),[k,setK]=useState('learn'),[dd,setDd]=useState(addDays(t,1));
 return html`<h2>手動新增待學項目</h2><div class="card"><label>主題</label><input type="text" value=${tp} onInput=${e=>setTp(e.target.value)}/>
