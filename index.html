@@ -27,6 +27,7 @@ nav button{flex:1;border:0;background:none;border-radius:0;min-height:56px;font-
 .bar button{flex:1}
 .sheet{position:fixed;inset:0;background:#0006;z-index:9;display:flex;align-items:flex-end;justify-content:center}
 .sheet>div{background:var(--bg);width:100%;max-width:480px;border-radius:14px 14px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px))}
+.kind-g{border-left:5px solid var(--ink)}.kind-s{border-left:5px dotted var(--tx);background:var(--surf)}.tag.g{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .toast{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:99px;z-index:20;max-width:90%}
 @media(min-width:768px){body{padding-left:180px;padding-bottom:0}
 nav{top:0;right:auto;width:180px;flex-direction:column;border-top:0;border-right:1px solid var(--line);padding-top:24px}
@@ -278,6 +279,17 @@ function GChecks({grammars,value,onChange}){const [tag,setTag]=useState('');cons
 return html`<div>${picked.length>0&&html`<div class="row" style="margin-bottom:6px">${picked.map(g=>html`<button class="sm" key=${g.id} onClick=${()=>onChange(value.filter(i=>i!==g.id))}>${g.name} ✕</button>`)}</div>`}
 <${TagSelect} grammars=${grammars} tag=${tag} setTag=${setTag}/>
 ${opts.map(g=>html`<label key=${g.id} style="display:flex;gap:8px;align-items:center;min-height:44px"><input type="checkbox" checked=${value.includes(g.id)} onChange=${e=>onChange(e.target.checked?[...value,g.id]:value.filter(i=>i!==g.id))}/>${g.name}</label>`)}</div>`}
+function LinkSheet(){const {data,up,say,go,setEdit,setPrefill,linkId,setLinkId,grammars}=React.useContext(Ctx);const [tag,setTag]=useState('');
+const it=data.items.find(x=>x.id===linkId);if(!it)return null;
+const nm=x=>(x||'').replace(/[〜~～\s・、。.]/g,'').toLowerCase(),tn=nm(it.topic);
+const cands=tn?grammars.filter(g=>{const n=nm(g.name);return n&&(n.includes(tn)||tn.includes(n))}).slice(0,5):[];
+const opts=inTag(grammars,tag);const link=g=>{up(d=>R.linkItems(d,[it.id],g));setLinkId(null);say('已連結到「'+g.name+'」')};
+return html`<div class="sheet" style="z-index:25" onClick=${()=>setLinkId(null)}><div style="max-height:85vh;overflow:auto" onClick=${e=>e.stopPropagation()}>
+<h3>連結到已記錄的文法</h3><p class="muted" style="margin-top:0">待學項目：${it.topic}</p>
+${cands.length>0&&html`<div><div class="muted">名稱相近，可能是這些：</div>${cands.map(g=>html`<button key=${g.id} style="width:100%;margin:4px 0;text-align:left" onClick=${()=>link(g)}>${g.name}　<span class="date">${g.studyDate}</span></button>`)}</div>`}
+<div class="muted" style="margin-top:8px">或從標籤找：</div><${TagSelect} grammars=${grammars} tag=${tag} setTag=${setTag}/>
+<select disabled=${!tag} value="" onChange=${e=>{const g=grammars.find(x=>x.id===e.target.value);if(g)link(g)}} style="margin-top:6px"><option value="">${tag?'— 選擇文法（'+opts.length+'）—':'— 請先選標籤 —'}</option>${opts.map(g=>html`<option value=${g.id} key=${g.id}>${g.name}</option>`)}</select>
+<div class="row" style="margin-top:12px"><button onClick=${()=>setLinkId(null)}>取消</button><button onClick=${()=>{setLinkId(null);setEdit(null);setPrefill({name:it.topic,itemId:it.id});go('gform')}}>記成新的文法筆記</button></div></div></div>`}
 const Ctx=React.createContext();
 function AddItem(){const {data,up,say,go,sid,sp,t,setEdit,edit,setData,gcard,grammars}=React.useContext(Ctx);const[tp,setTp]=useState(''),[k,setK]=useState('learn'),[dd,setDd]=useState(addDays(t,1));
 return html`<h2>手動新增待學項目</h2><div class="card"><label>主題</label><input type="text" value=${tp} onInput=${e=>setTp(e.target.value)}/>
@@ -292,8 +304,8 @@ return html`<h2>文法庫</h2><div class="row" style="margin-bottom:8px"><button
 <div class="row" style="margin:8px 0">${['',...tags].map(x=>html`<button class="sm" key=${x} style=${tg===x?'background:var(--ink);color:var(--bg)':''} onClick=${()=>setTg(x)}>${x||'全部'}</button>`)}</div>
 ${list.map(g=>html`<div key=${g.id}>${gcard(g)}</div>`)}${!list.length&&html`<div class="empty">${tab==='fav'&&!favN?'還沒有收藏的文法，點文法旁邊的 ☆ 就能收藏':T.noData}</div>`}
 <p><button class="pri" onClick=${()=>{setEdit(null);go('gform')}}>＋ 新增文法</button></p>`}
-function GForm(){const {data,up,say,go,sid,sp,t,setEdit,edit,setData,gcard,grammars}=React.useContext(Ctx);const old=data.grammar.find(g=>g.id===edit);
-const [f,setF]=useState(old?{...old,tags:old.tags.join(','),ex:old.examples[0]?.text||'',tr:old.examples[0]?.translation||''}:{studyDate:t,name:'',coreFunction:'',ex:'',tr:'',isFav:false,category:'',tone:'',usageRestrictions:'',register:'',connection:'',tags:''});
+function GForm(){const {prefill,setPrefill,data,up,say,go,sid,sp,t,setEdit,edit,setData,gcard,grammars}=React.useContext(Ctx);const old=data.grammar.find(g=>g.id===edit);
+const [f,setF]=useState(old?{...old,tags:old.tags.join(','),ex:old.examples[0]?.text||'',tr:old.examples[0]?.translation||''}:{studyDate:t,name:prefill?prefill.name:'',coreFunction:'',ex:'',tr:'',isFav:false,category:'',tone:'',usageRestrictions:'',register:'',connection:'',tags:''});
 const [more,setMore]=useState(false);const s=k=>e=>setF({...f,[k]:e.target.type==='checkbox'?e.target.checked:e.target.value});
 const linked=old?data.sentences.filter(x=>x.grammarIds.includes(old.id)):[];
 const save=async()=>{if(!f.name.trim())return say('請輸入文法名稱');
@@ -301,10 +313,10 @@ const tags=f.tags.split(/[,，]/).map(x=>x.trim()).filter(Boolean);
 const ex=f.ex.trim()?[{id:old?.examples[0]?.id||uid(),text:f.ex.trim(),translation:f.tr.trim()},...(old?.examples.slice(1)||[])]:old?.examples.slice(1)||[];
 let note=old?{...old,...f,name:f.name.trim(),tags,examples:ex,updatedAt:now()}:base({spaceId:sid,...f,name:f.name.trim(),tags,examples:ex,customFields:[],usageAudience:''});
 delete note.ex;delete note.tr;
-let r=R.saveGrammar(data,note);let nd=r.data;
+let r=R.saveGrammar(data,note);let nd=r.data;if(!old&&prefill&&prefill.itemId&&nd.items.some(i=>i.id===prefill.itemId)){nd=R.linkItems(nd,[prefill.itemId],note);}
 const hits=R.sameName(nd.items,note.name,sid);
 if(hits.length&&await ask('要把這些待學項目連到這筆文法嗎？\n'+hits.map(h=>'・'+h.topic+'（'+h.dueDate+'）').join('\n'),{yes:'連結',no:'不連結'}))nd=R.linkItems(nd,hits.map(h=>h.id),note);
-setData(nd);say(r.msg||'已儲存');go('grammar')};
+setData(nd);say(prefill&&prefill.itemId&&!old?'已儲存，並連結到待學項目':(r.msg||'已儲存'));setPrefill(null);go('grammar')};
 return html`<h2>${old?'編輯文法':'記文法'}</h2>
 <label>學習日期</label><input type="date" value=${f.studyDate} onChange=${s('studyDate')}/>
 <label>文法或句型名稱</label><input type="text" value=${f.name} onInput=${s('name')}/>
@@ -320,7 +332,7 @@ ${more&&html`<div><label>分類</label><input type="text" list="cats" value=${f.
 <label>接續方式</label><input type="text" value=${f.connection} onInput=${s('connection')}/>
 <label>標籤（用逗號分隔）</label><input type="text" value=${f.tags} onInput=${s('tags')}/></div>`}
 ${old&&html`<h2>連結到此文法的生活句子</h2>${linked.map(x=>html`<div class="card" key=${x.id}>${x.originalSentence}</div>`)}${!linked.length&&html`<div class="muted">尚無</div>`}`}
-<div style="height:70px"></div><div class="bar"><button onClick=${()=>go('grammar')}>取消</button><button class="pri" onClick=${save}>儲存</button></div>`}
+<div style="height:70px"></div><div class="bar"><button onClick=${()=>{setPrefill(null);go('grammar')}}>取消</button><button class="pri" onClick=${save}>儲存</button></div>`}
 function Spaces(){const {data,up,say,go,sid,sp,t,setEdit,edit,setData,gcard,grammars,sync,newSp,clearNewSp}=React.useContext(Ctx);const[ed,setEd]=useState(null);
 useEffect(()=>{if(newSp){setEd(base({targetLanguage:'',nativeLanguage:'中文',level:'',goal:'',categoryOptions:'',tagOptions:''}));clearNewSp()}},[newSp]);
 const F=(k,l)=>html`<label>${l}</label><input type="text" value=${ed[k]} onInput=${e=>setEd({...ed,[k]:e.target.value})}/>`;
@@ -373,7 +385,7 @@ const [ym,setYm]=useState(()=>{const[a,b]=t.split('-').map(Number);return [a,b-1
 const sents=data.sentences.filter(s=>s.spaceId===sid);
 const days=new Set([...grammars.map(g=>g.studyDate),...sents.map(s=>s.studyDate)]);
 const sorted=[...days].sort().reverse();
-const dayView=x=>html`<div key=${x}><span class="date">${x}</span>${grammars.filter(g=>g.studyDate===x).map(gcard)}${sents.filter(s=>s.studyDate===x).map(scard)}</div>`;
+const dayView=x=>{const gs=grammars.filter(g=>g.studyDate===x),ss=sents.filter(s=>s.studyDate===x);return html`<div key=${x}><span class="date">${x}</span>${gs.length>0&&html`<div class="muted" style="margin-top:6px">📘 記文法（${gs.length}）</div>`}${gs.map(gcard)}${ss.length>0&&html`<div class="muted" style="margin-top:6px">💬 記一句話（${ss.length}）</div>`}${ss.map(scard)}</div>`};
 const [y,m]=ym,first=new Date(y,m,1).getDay(),n=new Date(y,m+1,0).getDate();
 const cells=[...Array(first).fill(null),...Array.from({length:n},(_,i)=>i+1)];
 const move=k=>{const d=new Date(y,m+k,1);setYm([d.getFullYear(),d.getMonth()])};
@@ -393,7 +405,7 @@ return html`<h2>已完成 (${L.length})</h2><button onClick=${()=>setOpen(!open)
 /* ===== App ===== */
 function App(){
 const [data,_setData]=useState(()=>{let d=store.load();if(!d){let i=store.init();const first=i?.firstOpenDate||today();if(!i)store.markInit({firstOpenDate:first,at:now()});d=i?{schemaVersion:1,settings:{currentSpaceId:null},spaces:[],grammar:[],sentences:[],items:[]}:seedDemo(first);store.save(d)}return migrate(d)});
-const [page,setPage]=useState('home'),[edit,setEdit]=useState(null),[sedit,setSedit]=useState(null),[newSp,setNewSp]=useState(0),[menu,setMenu]=useState(false),[toast,setToast]=useState('');
+const [linkId,setLinkId]=useState(null),[prefill,setPrefill]=useState(null),[page,setPage]=useState('home'),[edit,setEdit]=useState(null),[sedit,setSedit]=useState(null),[newSp,setNewSp]=useState(0),[menu,setMenu]=useState(false),[toast,setToast]=useState('');
 const setData=React.useCallback(f=>_setData(prev=>{const nx=typeof f==='function'?f(prev):f;return stamp(prev,nx)}),[]);
 useEffect(()=>{store.save(data)},[data]);
 useEffect(()=>{try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}},[]);
@@ -410,14 +422,14 @@ const grammars=useMemo(()=>data.grammar.filter(g=>g.spaceId===sid),[data,sid]);
 const gname=id=>data.grammar.find(g=>g.id===id)?.name;
 const itemRow=i=>html`<div class="card" key=${i.id}><div class="row sp"><b>${i.topic||i.grammarNameSnapshot}</b><span class="row">
 <span class="tag">${i.kind==='review'?'複習':'待學'}</span>${i.isDemo&&html`<span class="tag">示範</span>`}</span></div>
-<div class="muted"><span class="date">${i.dueDate}</span>${i.grammarId&&gname(i.grammarId)?' ・ 文法：'+gname(i.grammarId):''}</div>
-<div class="row">${i.status==='pending'?html`<button class="sm" onClick=${()=>up(d=>({...d,items:d.items.map(x=>x.id===i.id?R.complete(x):x)}))}>完成</button>
+<div class="muted"><span class="date">${i.dueDate}</span>${i.grammarId&&gname(i.grammarId)?' ・ 文法：'+gname(i.grammarId):' ・ 尚未連結文法'}</div>
+<div class="row">${i.status==='pending'?html`<button class="sm" onClick=${async()=>{up(d=>({...d,items:d.items.map(x=>x.id===i.id?R.complete(x):x)}));if(!i.grammarId||!gname(i.grammarId)){const n=await ask('已完成「'+i.topic+'」。\n這個項目還沒有連結到已記錄的文法，要現在連結嗎？',{choices:['連結到已記錄的文法','記成新的文法筆記'],no:'先不用'});if(n===0)setLinkId(i.id);else if(n===1){setEdit(null);setPrefill({name:i.topic,itemId:i.id});go('gform')}}}}>完成</button>
 <button class="sm" onClick=${()=>up(d=>({...d,items:d.items.map(x=>x.id===i.id?R.postpone(x,t):x)}))}>延後一天</button>`:
 html`<button class="sm" onClick=${()=>up(d=>({...d,items:d.items.map(x=>x.id===i.id?R.undo(x):x)}))}>取消完成</button>`}
 <button class="sm" onClick=${async()=>{const v=await ask('修改主題',{input:i.topic,yes:'儲存'});if(v&&v.trim())up(d=>({...d,items:d.items.map(x=>x.id===i.id?{...x,topic:v.trim(),updatedAt:now()}:x)}))}}>編輯</button>
 <button class="sm danger" onClick=${async()=>{if(await ask('刪除這個待學項目？此動作無法復原。'))up(d=>({...d,items:d.items.filter(x=>x.id!==i.id)}))}}>刪除</button>
-${i.grammarId&&gname(i.grammarId)&&html`<button class="sm" onClick=${()=>{setEdit(i.grammarId);go('gform')}}>看文法</button>`}</div></div>`;
-const gcard=g=>html`<div class="card" key=${g.id}><div class="row sp"><b>${g.name}</b><span class="row"><button class="sm" aria-label=${g.isFav?'取消收藏':'收藏'} title=${g.isFav?'取消收藏':'收藏'} style="min-width:44px;font-size:20px;padding:0 6px" onClick=${()=>up(d=>({...d,grammar:d.grammar.map(x=>x.id===g.id?{...x,isFav:!x.isFav}:x)}))}>${g.isFav?'★':'☆'}</button>${g.isDemo&&html`<span class="tag">示範</span>`}</span></div>
+${i.grammarId&&gname(i.grammarId)?html`<button class="sm" onClick=${()=>{setEdit(i.grammarId);go('gform')}}>看文法</button>`:html`<button class="sm" onClick=${()=>setLinkId(i.id)}>連結文法</button>`}</div></div>`;
+const gcard=g=>html`<div class="card kind-g" key=${g.id}><div class="row sp"><span class="row"><span class="tag g">📘 文法</span><b>${g.name}</b></span><span class="row"><button class="sm" aria-label=${g.isFav?'取消收藏':'收藏'} title=${g.isFav?'取消收藏':'收藏'} style="min-width:44px;font-size:20px;padding:0 6px" onClick=${()=>up(d=>({...d,grammar:d.grammar.map(x=>x.id===g.id?{...x,isFav:!x.isFav}:x)}))}>${g.isFav?'★':'☆'}</button>${g.isDemo&&html`<span class="tag">示範</span>`}</span></div>
 <div class="muted"><span class="date">${g.studyDate}</span> ・ ${g.coreFunction}</div>
 ${g.examples[0]&&html`<div class="row"><span lang="ja">${g.examples[0].text}</span><${Spk} text=${g.examples[0].text}/></div>`}
 <${GDetail} g=${g}/><div class="row"><button class="sm" onClick=${()=>{setEdit(g.id);go('gform')}}>編輯</button>
@@ -426,7 +438,7 @@ if(await ask('刪除「'+g.name+'」？\n連結它的 '+n+' 筆句子／待學�
 if(!sp)return html`<${Ctx.Provider} value=${{data,up,say,go,sid,sp:{categoryOptions:[]},t,setEdit,edit,setData,gcard,grammars,sync,newSp,clearNewSp:()=>setNewSp(0)}}><main><h1>Daily Lingua</h1><div class="empty">還沒有語言空間。<br/><button class="pri" onClick=${()=>{go('spaces');setNewSp(n=>n+1)}}>建立語言空間</button></div>${page==='spaces'&&html`<${Spaces}/>`}</main><//>`;
 const header=html`<div class="row sp"><h1>Daily Lingua</h1>${sync.cfg.enabled&&(sync.needs?html`<button class="sm" onClick=${()=>sync.run(true)}>☁ 同步已暫停，點此重新連線</button>`:html`<span class="muted">☁ ${sync.label}</span>`)}<select style="width:auto" value=${sid} onChange=${e=>setSpace(e.target.value)}>
 ${data.spaces.map(s=>html`<option value=${s.id}>${s.targetLanguage} ▾</option>`)}</select></div>`;
-const scard=s=>html`<div class="card" key=${s.id}><div class="row sp"><b>${s.originalSentence}</b><span class="row">${(!s.firstAttempt||!s.naturalExpression)&&html`<span class="tag">未完成</span>`}${s.isDemo&&html`<span class="tag">示範</span>`}</span></div>
+const scard=s=>html`<div class="card kind-s" key=${s.id}><div class="row sp"><span class="row"><span class="tag">💬 一句話</span><b>${s.originalSentence}</b></span><span class="row">${(!s.firstAttempt||!s.naturalExpression)&&html`<span class="tag">未完成</span>`}${s.isDemo&&html`<span class="tag">示範</span>`}</span></div>
 ${s.firstAttempt&&html`<div class="row muted"><span>第一次：<span lang="ja">${s.firstAttempt}</span></span><${Spk} text=${s.firstAttempt}/></div>`}
 ${s.naturalExpression&&html`<div class="row"><span lang="ja">自然說法：${s.naturalExpression}</span><${Spk} text=${s.naturalExpression}/></div>`}
 ${[['pinyin','拼音錯誤'],['fix','語句修正'],['other','其他筆記']].map(([k,l])=>s.corrections&&s.corrections[k]&&html`<div class="muted" key=${k}>${l}：${s.corrections[k]}</div>`)}
@@ -454,12 +466,12 @@ else body=html`${header}<${Spaces}/>`;
 
 
 
-return html`<${Ctx.Provider} value=${{data,up,say,go,sid,sp,t,setEdit,edit,sedit,setSedit,setData,gcard,grammars,scard,itemRow,sync,newSp,clearNewSp:()=>setNewSp(0)}}><main>${body}</main>
+return html`<${Ctx.Provider} value=${{data,up,say,go,sid,sp,t,setEdit,edit,sedit,setSedit,setData,gcard,grammars,scard,itemRow,sync,newSp,clearNewSp:()=>setNewSp(0),linkId,setLinkId,prefill,setPrefill}}><main>${body}</main>
 ${isForm?null:html`<nav>${nav.map(p=>p==='+'?html`<button key=${p} onClick=${()=>setMenu(true)}>＋ 新增</button>`:html`<button key=${p} class=${page===p?'on':''} onClick=${()=>go(p)}>${T[p]}</button>`)}
 <button class=${page==='spaces'?'on':''} onClick=${()=>go('spaces')} style="display:${window.innerWidth>=768?'block':'none'}">語言空間</button></nav>`}
 ${menu&&html`<div class="sheet" onClick=${()=>setMenu(false)}><div><h3>想記什麼？</h3><div class="row"><button class="pri" onClick=${()=>{setSedit(null);go('sform')}}>記一句話</button>
 <button class="pri" onClick=${()=>{setEdit(null);go('gform')}}>記文法</button></div></div></div>`}
 ${page!=='spaces'&&!isForm&&html`<main style="padding-top:0"><button onClick=${()=>go('spaces')}>語言空間與資料管理</button></main>`}
-${toast&&html`<div class="toast">${toast}</div>`}<//>`}
+<${LinkSheet}/>${toast&&html`<div class="toast">${toast}</div>`}<//>`}
 ReactDOM.createRoot(document.getElementById('root')).render(html`<${React.Fragment}><${App}/><${DlgHost}/><//>`);
 </script></body></html>
